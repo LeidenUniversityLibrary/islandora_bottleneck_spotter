@@ -178,8 +178,8 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
             $message .= ' => ' . $whatstats['info'];
           }
           $message .= "\n";
+          $messages[] = $message;
         }
-        $messages[] = $message;
       }
     }
     file_put_contents($path, $messages, FILE_APPEND);
