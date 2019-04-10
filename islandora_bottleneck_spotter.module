@@ -32,7 +32,7 @@ function islandora_bottleneck_spotter_boot() {
 }
 
 function islandora_bottleneck_spotter_exit() {
-  _islandora_bottleneck_spotter_mark('page', 1, NULL, TRUE);
+  _islandora_bottleneck_spotter_mark('page', 1, (drupal_page_is_cacheable()?'cached':'not cached'), TRUE);
 }
 
 function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
@@ -52,11 +52,11 @@ function islandora_bottleneck_spotter_islandora_view_object($object, $user, $pag
 }
 
 function islandora_bottleneck_spotter_islandora_object_access($op, $object, $user) {
-  _islandora_bottleneck_spotter_mark('object_access', 0, $op . ':' . $object->id);
+  _islandora_bottleneck_spotter_mark('object_access', 0, $object->id);
 }
 
 function islandora_bottleneck_spotter_islandora_datastream_access($op, $object, $user) {
-  _islandora_bottleneck_spotter_mark('datastream_access', 0, $op . ':' . $object->id);
+  _islandora_bottleneck_spotter_mark('datastream_access', 0, $object->id);
 }
 
 function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $printtolog = FALSE) {
@@ -67,7 +67,7 @@ function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $
     $stats[$url] = array();
   }
   if (!isset($stats[$url][$what])) {
-    $stats[$url][$what] = array('times' => array());  
+    $stats[$url][$what] = array('times' => array());
   }
   $stats[$url][$what]['times'][$advancement] = microtime(true);
   if (isset($info)) {
@@ -75,7 +75,6 @@ function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $
   }
 
   if ($printtolog) {
-dpm($stats, 'stats');
     $messages = array();
     $date = date("Ymd");
     $time = date("G:i:s");
@@ -83,28 +82,30 @@ dpm($stats, 'stats');
     foreach ($stats as $url => $urlstats) {
       $timeurl = "$time -> $url";
       foreach ($urlstats as $what => $whatstats) {
-        $message = "$timeurl -> $what";
-        $start = $whatstats['times'][0];
-        unset($whatstats['times'][0]);
-        if (count($whatstats['times']) > 1 || !isset($whatstats['times'][1])) { 
-          $times = array();
-          foreach ($whatstats['times'] as $advancement => $t) {
-            $percentage = ($advancement * 100) . '%';
-            $times[] = $percentage . ':' . ($t - $start);
+        if (isset($whatstats['times'][0])) {
+          $message = "$timeurl -> $what";
+          $start = $whatstats['times'][0];
+          unset($whatstats['times'][0]);
+          if (count($whatstats['times']) > 1) {
+            $times = array();
+            foreach ($whatstats['times'] as $advancement => $t) {
+              $percentage = ($advancement * 100) . '%';
+              $times[] = $percentage . ':' . ($t - $start);
+            }
+            $message .= ' (' . implode(', ', $times) . ')';
           }
-          $message .= ' (' . implode(', ', $times) . ')';
+          elseif (isset($whatstats['times'][1])) {
+            $message .= ' (' . ($whatstats['times'][1] - $start) . ')';
+          }
+          else {
+            $message .= ' (' . (microtime(TRUE) - $start) . '<)';
+          }
+          if (isset($whatstats['info'])) {
+            $message .= ' => ' . implode(', ', array_unique($whatstats['info']));
+          }
+          $message .= "\n";
+          $messages[] = $message;
         }
-        elseif (isset($whatstats['times'][1])) {
-          $message .= ' (' . ($whatstats['times'][1] - $start) . ')';
-        }
-        else {
-          $message .= ' (' . (microtime(TRUE) - $start) . '<)';
-        }
-        if (isset($whatstats['info'])) {
-          $message .= ' => ' . implode(', ', $whatstats['info']);
-        }
-        $message .= "\n";
-        $messages[] = $message;
       }
     }
     file_put_contents($path, $messages, FILE_APPEND);
