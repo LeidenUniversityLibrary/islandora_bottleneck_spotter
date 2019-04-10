@@ -133,20 +133,19 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
 
   $url = drupal_get_path_alias();
   if (!isset($stats[$url])) {
-    $stats[$url] = array();
+    $stats[$url] = array(
+      'REQUEST_TIME' => isset($_SERVER["REQUEST_TIME_FLOAT"])?$_SERVER["REQUEST_TIME_FLOAT"]:microtime(TRUE),
+      'whats' => array(),
+    );
   }
-  $stats[$url]['REQUEST_TIME'] = isset($_SERVER["REQUEST_TIME_FLOAT"])?$_SERVER["REQUEST_TIME_FLOAT"]:microtime(TRUE);
-  if (!isset($stats[$url][$what])) {
-    $stats[$url][$what] = array();
-  }
-  $whatstats = array('time' => microtime(TRUE));
+  $whatstats = array('what' => $what, 'time' => microtime(TRUE));
   if (isset($time_since)) {
     $whatstats['since'] = $time_since;
   }
   if (isset($info)) {
     $whatstats['info'] = $info;
   }
-  $stats[$url][$what][] = $whatstats;
+  $stats[$url]['whats'][] = $whatstats;
 
   if ($printtolog) {
     $messages = array();
@@ -156,30 +155,30 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
     foreach ($stats as $url => $urlstats) {
       $timeurl = "$time $url";
       $start = $urlstats['REQUEST_TIME'];
-      unset($urlstats['REQUEST_TIME']);
-      foreach ($urlstats as $what => $whatstatsarray) {
-        foreach ($whatstatsarray as $number => $whatstats) {
-          $message = "$timeurl -> $what";
-          $message .= ' @ ' . ($whatstats['time'] - $start);
-          if (isset($whatstats['since'])) {
-            foreach ($whatstats['since'] as $related => $label) {
-              if (isset($urlstats[$related][$number]['time'])) {
-                $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $urlstats[$related][$number]['time']) . ')';
-              }
-              elseif ($related === 'REQUEST_TIME') {
-                $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $start) . ')';
-              }
-              else {
-                $message .= ' (no total for ' . $label . ')';
-              }
+      $lasts = array();
+      foreach ($urlstats['whats'] as $number => $whatstats) {
+        $what = $whatstats['what'];
+        $message = "$timeurl -> $what";
+        $message .= ' @ ' . ($whatstats['time'] - $start);
+        if (isset($whatstats['since'])) {
+          foreach ($whatstats['since'] as $related => $label) {
+            if (isset($lasts[$related]['time'])) {
+              $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $lasts[$related]['time']) . ')';
+            }
+            elseif ($related === 'REQUEST_TIME') {
+              $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $start) . ')';
+            }
+            else {
+              $message .= ' (no total for ' . $label . ')';
             }
           }
-          if (isset($whatstats['info'])) {
-            $message .= ' => ' . $whatstats['info'];
-          }
-          $message .= "\n";
-          $messages[] = $message;
         }
+        if (isset($whatstats['info'])) {
+          $message .= ' => ' . $whatstats['info'];
+        }
+        $message .= "\n";
+        $messages[] = $message;
+        $lasts[$what] = $whatstats;
       }
     }
     file_put_contents($path, $messages, FILE_APPEND);
