@@ -160,7 +160,18 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
     $date = date("Ymd");
     $time = date("G:i:s");
     $path = "/tmp/bottleneckspotter_$date.log";
+    $newstats = array();
     foreach ($stats as $url => $urlstats) {
+      $alias = drupal_lookup_path('alias', $url);
+      if ($alias && $url !== $alias) {
+        if (isset($newstats[$alias])) {
+          $urlstats = array_merge($newstats[$alias], $urlstats);
+        }
+        $url = $alias;
+      }
+      $newstats[$url] = $urlstats;
+    }
+    foreach ($newstats as $url => $urlstats) {
       $timeurl = "$time $url";
       $start = $urlstats['REQUEST_TIME'];
       unset($urlstats['REQUEST_TIME']);
