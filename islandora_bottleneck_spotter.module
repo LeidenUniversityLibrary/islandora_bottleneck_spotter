@@ -25,51 +25,131 @@
  */
 
 /**
+ * Page timing:
+ */
+
+/**
  * Implements hook_boot().
  */
 function islandora_bottleneck_spotter_boot() {
-  _islandora_bottleneck_spotter_mark('page', 0);
+  _islandora_bottleneck_spotter_mark('page start');
 }
 
+/**
+ * Implements hook_exit().
+ */
 function islandora_bottleneck_spotter_exit() {
-  _islandora_bottleneck_spotter_mark('page', 1, (drupal_page_is_cacheable()?'cached':'not cached'), TRUE);
+  _islandora_bottleneck_spotter_mark('page end', array('page start' => 'page'), (drupal_page_is_cacheable()?'cached':'not cached'), TRUE);
 }
 
+
+/**
+ * Solr timing:
+ */
+
+/**
+ * Implements hook_islandora_solr_query().
+ */
 function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
   $info = 'q:' . $solrobj->solrQuery;
   if (isset($solrobj->solrParams['fq']) && count($solrobj->solrParams['fq']) > 0) {
     $info .= ' fq:' . implode('|', $solrobj->solrParams['fq']);
   }
-  _islandora_bottleneck_spotter_mark('solr_search', 0, $info);
+  _islandora_bottleneck_spotter_mark('solr_query', NULL, $info);
 }
 
+/**
+ * Implements hook_islandora_solr_query_result().
+ */
 function islandora_bottleneck_spotter_islandora_solr_query_result($results) {
-  _islandora_bottleneck_spotter_mark('solr_search', 1, 'results found: ' . $results['response']['numFound']);
+  _islandora_bottleneck_spotter_mark('solr_result', array('solr_query' => 'solr'), 'results found: ' . $results['response']['numFound']);
 }
 
+/**
+ * Implements hook_islandora_solr_primary_display().
+ */
+function islandora_bottleneck_spotter_islandora_solr_primary_display() {
+  _islandora_bottleneck_spotter_mark('solr_1_display');
+}
+
+/**
+ * Implements hook_islandora_solr_secondary_display().
+ */
+function islandora_bottleneck_spotter_islandora_solr_secondary_display() {
+  _islandora_bottleneck_spotter_mark('solr_2_display');
+}
+
+/**
+ * Implements hook_islandora_solr_metadata_display_elements_alter().
+ */
+function islandora_bottleneck_spotter_islandora_solr_metadata_display_elements_alter(&$elements) {
+  _islandora_bottleneck_spotter_mark('solr_md_display_alter');
+}
+
+/**
+ * Implements hook_islandora_solr_metadata_description_elements_alter().
+ */
+function islandora_bottleneck_spotter_islandora_solr_metadata_description_elements_alter(&$elements) {
+  _islandora_bottleneck_spotter_mark('solr_md_description_alter');
+}
+
+/**
+ * Islandora module hooks:
+ */
+
+/**
+ * Implements hook_islandora_view_object().
+ */
 function islandora_bottleneck_spotter_islandora_view_object($object, $user, $page_number = 0, $page_size = 0) {
-  _islandora_bottleneck_spotter_mark('view_object', 0, $object->id);
+  _islandora_bottleneck_spotter_mark('view_object', NULL, $object->id);
 }
 
+/**
+ * Implements hook_islandora_object_access().
+ */
 function islandora_bottleneck_spotter_islandora_object_access($op, $object, $user) {
-  _islandora_bottleneck_spotter_mark('object_access', 0, $object->id);
+  _islandora_bottleneck_spotter_mark('object_access', NULL, $object->id);
 }
 
+/**
+ * Implements hook_islandora_datastream_access().
+ */
 function islandora_bottleneck_spotter_islandora_datastream_access($op, $object, $user) {
-  _islandora_bottleneck_spotter_mark('datastream_access', 0, $object->id);
+  _islandora_bottleneck_spotter_mark('datastream_access', NULL, $object->id);
 }
 
-function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $printtolog = FALSE) {
+
+
+/**
+ * Helper function to mark the time of each.
+ *
+ *  @param $what
+ *    a label (string) for what to mark.
+ *  @param $time_since
+ *    an associative array containing one key and one value, used to log the
+ *    total time between two related whats:
+ *     - key is the name of the related what
+ *     - value is the label for the total time
+ *  @param $info
+ *    array with additional info to log
+ *  @param $printtolog
+ *    BOOL indicating if it should be logged: only use this on hook_exit!
+ */
+function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = NULL, $printtolog = FALSE) {
   $stats = &drupal_static(__FUNCTION__);
 
   $url = $_GET['q']; // this does not work at boot: current_path();
   if (!isset($stats[$url])) {
     $stats[$url] = array();
   }
+  $stats[$url]['REQUEST_TIME'] = isset($_SERVER["REQUEST_TIME_FLOAT"])?$_SERVER["REQUEST_TIME_FLOAT"]:microtime(true);
   if (!isset($stats[$url][$what])) {
-    $stats[$url][$what] = array('times' => array());
+    $stats[$url][$what] = array('time' => microtime(true), 'freq' => 0);
   }
-  $stats[$url][$what]['times'][$advancement] = microtime(true);
+  $stats[$url][$what]['freq'] = $stats[$url][$what]['freq'] + 1;
+  if (isset($time_since)) {
+    $stats[$url][$what]['since'] = $time_since;
+  }
   if (isset($info)) {
     $stats[$url][$what]['info'][] = $info;
   }
@@ -80,32 +160,30 @@ function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $
     $time = date("G:i:s");
     $path = "/tmp/bottleneckspotter_$date.log";
     foreach ($stats as $url => $urlstats) {
-      $timeurl = "$time -> $url";
+      $timeurl = "$time $url";
+      $start = $urlstats['REQUEST_TIME'];
+      unset($urlstats['REQUEST_TIME']);
       foreach ($urlstats as $what => $whatstats) {
-        if (isset($whatstats['times'][0])) {
-          $message = "$timeurl -> $what";
-          $start = $whatstats['times'][0];
-          unset($whatstats['times'][0]);
-          if (count($whatstats['times']) > 1) {
-            $times = array();
-            foreach ($whatstats['times'] as $advancement => $t) {
-              $percentage = ($advancement * 100) . '%';
-              $times[] = $percentage . ':' . ($t - $start);
-            }
-            $message .= ' (' . implode(', ', $times) . ')';
-          }
-          elseif (isset($whatstats['times'][1])) {
-            $message .= ' (' . ($whatstats['times'][1] - $start) . ')';
-          }
-          else {
-            $message .= ' (' . (microtime(TRUE) - $start) . '<)';
-          }
-          if (isset($whatstats['info'])) {
-            $message .= ' => ' . implode(', ', array_unique($whatstats['info']));
-          }
-          $message .= "\n";
-          $messages[] = $message;
+        $message = "$timeurl -> $what";
+        $message .= ' @ ' . ($whatstats['time'] - $start);
+        if ($whatstats['freq'] > 1) {
+          $message .= ' (' . $whatstats['freq'] . 'x)';
         }
+        if (isset($whatstats['since'])) {
+          foreach ($whatstats['since'] as $related => $label) {
+            if (isset($urlstats[$related]['time'])) {
+              $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $urlstats[$related]['time']) . ')';
+            }
+            else {
+              $message .= ' (no total for ' . $label . ')';
+            }
+          }
+        }
+        if (isset($whatstats['info'])) {
+          $message .= ' => ' . implode(', ', array_unique($whatstats['info']));
+        }
+        $message .= "\n";
+        $messages[] = $message;
       }
     }
     file_put_contents($path, $messages, FILE_APPEND);
