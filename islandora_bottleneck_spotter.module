@@ -1,0 +1,113 @@
+<?php
+
+/**
+ * @file
+ * islandora_bottleneck_spotter.module
+ *
+ *
+ *  Copyright 2019 Leiden University Library
+ *
+ *  This file is part of islandora_bottleneck_spotter.
+ *
+ *  islandora_bottleneck_spotter is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+/**
+ * Implements hook_boot().
+ */
+function islandora_bottleneck_spotter_boot() {
+  _islandora_bottleneck_spotter_mark('page', 0);
+}
+
+function islandora_bottleneck_spotter_exit() {
+  _islandora_bottleneck_spotter_mark('page', 1, NULL, TRUE);
+}
+
+function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
+  $info = 'q:' . $solrobj->solrQuery;
+  if (isset($solrobj->solrParams['fq']) && count($solrobj->solrParams['fq']) > 0) {
+    $info .= ' fq:' . implode('|', $solrobj->solrParams['fq']);
+  }
+  _islandora_bottleneck_spotter_mark('solr_search', 0, $info);
+}
+
+function islandora_bottleneck_spotter_islandora_solr_query_result($results) {
+  _islandora_bottleneck_spotter_mark('solr_search', 1, 'results found: ' . $results['response']['numFound']);
+}
+
+function islandora_bottleneck_spotter_islandora_view_object($object, $user, $page_number = 0, $page_size = 0) {
+  _islandora_bottleneck_spotter_mark('view_object', 0, $object->id);
+}
+
+function islandora_bottleneck_spotter_islandora_object_access($op, $object, $user) {
+  _islandora_bottleneck_spotter_mark('object_access', 0, $op . ':' . $object->id);
+}
+
+function islandora_bottleneck_spotter_islandora_datastream_access($op, $object, $user) {
+  _islandora_bottleneck_spotter_mark('datastream_access', 0, $op . ':' . $object->id);
+}
+
+function _islandora_bottleneck_spotter_mark($what, $advancement, $info = NULL, $printtolog = FALSE) {
+  $stats = &drupal_static(__FUNCTION__);
+
+  $url = $_GET['q']; // this does not work at boot: current_path();
+  if (!isset($stats[$url])) {
+    $stats[$url] = array();
+  }
+  if (!isset($stats[$url][$what])) {
+    $stats[$url][$what] = array('times' => array());  
+  }
+  $stats[$url][$what]['times'][$advancement] = microtime(true);
+  if (isset($info)) {
+    $stats[$url][$what]['info'][] = $info;
+  }
+
+  if ($printtolog) {
+dpm($stats, 'stats');
+    $messages = array();
+    $date = date("Ymd");
+    $time = date("G:i:s");
+    $path = "/tmp/bottleneckspotter_$date.log";
+    foreach ($stats as $url => $urlstats) {
+      $timeurl = "$time -> $url";
+      foreach ($urlstats as $what => $whatstats) {
+        $message = "$timeurl -> $what";
+        $start = $whatstats['times'][0];
+        unset($whatstats['times'][0]);
+        if (count($whatstats['times']) > 1 || !isset($whatstats['times'][1])) { 
+          $times = array();
+          foreach ($whatstats['times'] as $advancement => $t) {
+            $percentage = ($advancement * 100) . '%';
+            $times[] = $percentage . ':' . ($t - $start);
+          }
+          $message .= ' (' . implode(', ', $times) . ')';
+        }
+        elseif (isset($whatstats['times'][1])) {
+          $message .= ' (' . ($whatstats['times'][1] - $start) . ')';
+        }
+        else {
+          $message .= ' (' . (microtime(TRUE) - $start) . '<)';
+        }
+        if (isset($whatstats['info'])) {
+          $message .= ' => ' . implode(', ', $whatstats['info']);
+        }
+        $message .= "\n";
+        $messages[] = $message;
+      }
+    }
+    file_put_contents($path, $messages, FILE_APPEND);
+    unset($stats);
+  }
+}

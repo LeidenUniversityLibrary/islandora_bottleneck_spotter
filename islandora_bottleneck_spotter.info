@@ -1,0 +1,7 @@
+name = Islandora Bottleneck Spotter
+description = Logs the duration of page loads, Solr requests etc. to identify bottlenecks.
+package = Islandora Tools
+dependencies[] = islandora
+version = "7.x-1.x-dev"
+core = "7.x"
+
