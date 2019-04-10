@@ -29,17 +29,10 @@
  */
 
 /**
- * Implements hook_boot().
- */
-function islandora_bottleneck_spotter_boot() {
-  _islandora_bottleneck_spotter_mark('page start');
-}
-
-/**
  * Implements hook_exit().
  */
 function islandora_bottleneck_spotter_exit() {
-  _islandora_bottleneck_spotter_mark('page end', array('page start' => 'page'), (drupal_page_is_cacheable()?'cached':'not cached'), TRUE);
+  _islandora_bottleneck_spotter_mark('page end', array('REQUEST_TIME' => 'page'), (drupal_page_is_cacheable()?'cached':'not cached'), TRUE);
 }
 
 
@@ -138,7 +131,7 @@ function islandora_bottleneck_spotter_islandora_datastream_access($op, $object, 
 function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = NULL, $printtolog = FALSE) {
   $stats = &drupal_static(__FUNCTION__);
 
-  $url = $_GET['q']; // this does not work at boot: current_path();
+  $url = drupal_get_path_alias();
   if (!isset($stats[$url])) {
     $stats[$url] = array();
   }
@@ -160,18 +153,7 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
     $date = date("Ymd");
     $time = date("G:i:s");
     $path = "/tmp/bottleneckspotter_$date.log";
-    $newstats = array();
     foreach ($stats as $url => $urlstats) {
-      $alias = drupal_lookup_path('alias', $url);
-      if ($alias && $url !== $alias) {
-        if (isset($newstats[$alias])) {
-          $urlstats = array_merge($newstats[$alias], $urlstats);
-        }
-        $url = $alias;
-      }
-      $newstats[$url] = $urlstats;
-    }
-    foreach ($newstats as $url => $urlstats) {
       $timeurl = "$time $url";
       $start = $urlstats['REQUEST_TIME'];
       unset($urlstats['REQUEST_TIME']);
@@ -183,6 +165,9 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
             foreach ($whatstats['since'] as $related => $label) {
               if (isset($urlstats[$related][$number]['time'])) {
                 $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $urlstats[$related][$number]['time']) . ')';
+              }
+              elseif ($related === 'REQUEST_TIME') {
+                $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $start) . ')';
               }
               else {
                 $message .= ' (no total for ' . $label . ')';
