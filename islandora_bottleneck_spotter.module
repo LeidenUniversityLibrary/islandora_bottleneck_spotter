@@ -41,12 +41,13 @@ function islandora_bottleneck_spotter_exit() {
  */
 
 /**
- * Implements hook_islandora_solr_query().
+ * Implements hook_islandora_solr_query_alter().
  */
-function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
+function islandora_bottleneck_spotter_islandora_solr_query_alter($solrobj) {
   $info = 'q:' . $solrobj->solrQuery;
-  if (isset($solrobj->solrParams['fq']) && count($solrobj->solrParams['fq']) > 0) {
-    $info .= ' fq:' . implode('|', $solrobj->solrParams['fq']);
+  $params = array_merge($solrobj->internalSolrParams, $solrobj->solrParams, array('limit' => $solrobj->solrLimit));
+  foreach ($params as $key => $value) {
+    $info .= " $key:" . (is_array($value)?implode('|', $value):$value);
   }
   _islandora_bottleneck_spotter_mark('solr_query', NULL, $info);
 }
@@ -55,7 +56,7 @@ function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
  * Implements hook_islandora_solr_query_result().
  */
 function islandora_bottleneck_spotter_islandora_solr_query_result($results) {
-  _islandora_bottleneck_spotter_mark('solr_result', array('solr_query' => 'solr'), 'results found: ' . $results['response']['numFound']);
+  _islandora_bottleneck_spotter_mark('solr_result', array('solr_query' => 'solr'), 'found: ' . $results['response']['numFound']);
 }
 
 /**
@@ -63,6 +64,7 @@ function islandora_bottleneck_spotter_islandora_solr_query_result($results) {
  */
 function islandora_bottleneck_spotter_islandora_solr_primary_display() {
   _islandora_bottleneck_spotter_mark('solr_1_display');
+  return array();
 }
 
 /**
@@ -70,6 +72,7 @@ function islandora_bottleneck_spotter_islandora_solr_primary_display() {
  */
 function islandora_bottleneck_spotter_islandora_solr_secondary_display() {
   _islandora_bottleneck_spotter_mark('solr_2_display');
+  return array();
 }
 
 /**
@@ -95,6 +98,7 @@ function islandora_bottleneck_spotter_islandora_solr_metadata_description_elemen
  */
 function islandora_bottleneck_spotter_islandora_view_object($object, $user, $page_number = 0, $page_size = 0) {
   _islandora_bottleneck_spotter_mark('view_object', NULL, $object->id);
+  return array();
 }
 
 /**
@@ -102,15 +106,209 @@ function islandora_bottleneck_spotter_islandora_view_object($object, $user, $pag
  */
 function islandora_bottleneck_spotter_islandora_object_access($op, $object, $user) {
   _islandora_bottleneck_spotter_mark('object_access', NULL, $object->id);
+  return NULL; // don't mess with object access...
 }
 
 /**
  * Implements hook_islandora_datastream_access().
  */
 function islandora_bottleneck_spotter_islandora_datastream_access($op, $object, $user) {
-  _islandora_bottleneck_spotter_mark('datastream_access', NULL, $object->id);
+  _islandora_bottleneck_spotter_mark('datastream_access', NULL, $object->id . '@' . $object->parent->id);
+  return NULL; // don't mess with datastream access...
 }
 
+/**
+ * Drupal hooks:
+ */
+
+/**
+ * Implements hook_ajax_render_alter().
+ */
+function islandora_bottleneck_spotter_ajax_render_alter() {
+  _islandora_bottleneck_spotter_mark('ajax_render');
+}
+
+/**
+ * Implements hook_block_cid_parts_alter().
+ */
+function islandora_bottleneck_spotter_block_cid_parts_alter(&$cid_parts, $block) {
+  _islandora_bottleneck_spotter_mark('block_cid_parts', NULL, $block->delta);
+}
+
+/**
+ * Implements hook_block_list_alter().
+ */
+function islandora_bottleneck_spotter_block_list_alter() {
+  _islandora_bottleneck_spotter_mark('block_list');
+}
+
+/**
+ * Implements hook_block_view_alter().
+ */
+function islandora_bottleneck_spotter_block_view_alter(&$data, $block) {
+  _islandora_bottleneck_spotter_mark('block_view', NULL, $block->delta);
+}
+
+/**
+ * Implements hook_contextual_links_view_alter().
+ */
+function islandora_bottleneck_spotter_contextual_links_view_alter() {
+  _islandora_bottleneck_spotter_mark('contextual_links_view');
+}
+
+/**
+ * Implements hook_css_alter().
+ */
+function islandora_bottleneck_spotter_css_alter() {
+  _islandora_bottleneck_spotter_mark('css_alter');
+}
+
+/**
+ * Implements hook_drupal_goto_alter().
+ */
+function islandora_bottleneck_spotter_drupal_goto(&$path, &$options, &$http_response_code) {
+  _islandora_bottleneck_spotter_mark('drupal_goto', NULL, $path);
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function islandora_bottleneck_spotter_element_info_alter() {
+  _islandora_bottleneck_spotter_mark('element_info_alter');
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function islandora_bottleneck_spotter_entity_info_alter() {
+  _islandora_bottleneck_spotter_mark('entity_info_alter');
+}
+
+/**
+ * Implements hook_entity_query_alter().
+ */
+function islandora_bottleneck_spotter_entity_query_alter() {
+  _islandora_bottleneck_spotter_mark('entity_query_alter');
+}
+
+/**
+ * Implements hook_entity_view_alter().
+ */
+function islandora_bottleneck_spotter_entity_view_alter(&$build, $type) {
+  _islandora_bottleneck_spotter_mark('entity_view_alter', NULL, $type);
+}
+
+/**
+ * Implements hook_file_copy().
+ */
+function islandora_bottleneck_spotter_file_copy($file, $source) {
+  _islandora_bottleneck_spotter_mark('file_copy', NULL, $filename->filename . ' to ' . $source->filename);
+}
+
+/**
+ * Implements hook_file_move().
+ */
+function islandora_bottleneck_spotter_file_move($file, $source) {
+  _islandora_bottleneck_spotter_mark('file_move', NULL, $filename->filename . ' to ' . $source->filename);
+}
+
+/**
+ * Implements hook_html_head_alter().
+ */
+function islandora_bottleneck_spotter_html_head_alter() {
+  _islandora_bottleneck_spotter_mark('html_head_alter');
+}
+
+/**
+ * Implements hook_js_alter().
+ */
+function islandora_bottleneck_spotter_js_alter() {
+  _islandora_bottleneck_spotter_mark('js_alter');
+}
+
+/**
+ * Implements hook_library_alter().
+ */
+function islandora_bottleneck_spotter_library_alter(&$libraries, $module) {
+  _islandora_bottleneck_spotter_mark('library_alter', NULL, $module);
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function islandora_bottleneck_spotter_menu_alter() {
+  _islandora_bottleneck_spotter_mark('menu_alter');
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function islandora_bottleneck_spotter_menu_local_tasks_alter() {
+  _islandora_bottleneck_spotter_mark('menu_local_tasks_alter');
+}
+
+/**
+ * Implements hook_node_view_alter().
+ */
+function islandora_bottleneck_spotter_node_view_alter() {
+  _islandora_bottleneck_spotter_mark('node_view_alter');
+}
+
+/**
+ * Implements hook_page_alter().
+ */
+function islandora_bottleneck_spotter_page_alter() {
+  _islandora_bottleneck_spotter_mark('page_alter');
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function islandora_bottleneck_spotter_page_build() {
+  _islandora_bottleneck_spotter_mark('page_build');
+}
+
+/**
+ * Implements hook_page_delivery_callback_alter().
+ */
+function islandora_bottleneck_spotter_page_delivery_callback_alter() {
+  _islandora_bottleneck_spotter_mark('page_delivery_callback_alter');
+}
+
+/**
+ * Implements hook_url_inbound_alter().
+ */
+function islandora_bottleneck_spotter_url_inbound_alter(&$path, $original_path, $path_language) {
+  _islandora_bottleneck_spotter_mark('url_inbound_alter', NULL, $path);
+}
+
+/**
+ * Implements hook_url_outbound_alter().
+ */
+function islandora_bottleneck_spotter_url_outbound_alter(&$path, $original_path, $path_language) {
+  _islandora_bottleneck_spotter_mark('url_outbound_alter', NULL, $path);
+}
+
+/**
+ * Implements hook_view().
+ */
+function islandora_bottleneck_spotter_view() {
+  _islandora_bottleneck_spotter_mark('view');
+}
+
+/**
+ * Implements hook_preprocess().
+ */
+function islandora_bottleneck_spotter_preprocess(&$variables, $hook) {
+  _islandora_bottleneck_spotter_mark('preprocess', NULL, $hook);
+}
+
+/**
+ * Implements hook_process().
+ */
+function islandora_bottleneck_spotter_process(&$variables, $hook) {
+  _islandora_bottleneck_spotter_mark('process', NULL, $hook);
+}
 
 
 /**
@@ -156,6 +354,8 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
       $timeurl = "$time $url";
       $start = $urlstats['REQUEST_TIME'];
       $lasts = array();
+      $messages[] = "\n>>>> $timeurl\n";
+      $lasttime = 0;
       foreach ($urlstats['whats'] as $number => $whatstats) {
         $what = $whatstats['what'];
         $message = "$timeurl -> $what";
@@ -173,15 +373,19 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
             }
           }
         }
+        else {
+          $message .= ' (since last: ' . sprintf("%.5F", ($whatstats['time'] - $lasttime)) . ')';
+        }
         if (isset($whatstats['info'])) {
           $message .= ' => ' . $whatstats['info'];
         }
         $message .= "\n";
         $messages[] = $message;
         $lasts[$what] = $whatstats;
+        $lasttime = $whatstats['time'];
       }
     }
-    file_put_contents($path, $messages, FILE_APPEND);
+    file_put_contents($path, $messages, FILE_APPEND | LOCK_EX);
     unset($stats);
   }
 }
