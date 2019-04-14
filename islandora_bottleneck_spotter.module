@@ -343,6 +343,7 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
   if (isset($info)) {
     $whatstats['info'] = $info;
   }
+  //$whatstats['trace'] = debug_backtrace(0, 10);
   $stats[$url]['whats'][] = $whatstats;
 
   if ($printtolog) {
@@ -354,19 +355,37 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
       $timeurl = "$time $url";
       $start = $urlstats['REQUEST_TIME'];
       $lasts = array();
-      $messages[] = "\n>>>> $timeurl\n";
       $lasttime = 0;
+      $lastwhat = NULL;
+      $lastsontime = array('sincelast' => array(), 'timesince' => array());
+      $usage = array('count' => array(), 'time' => array());
       foreach ($urlstats['whats'] as $number => $whatstats) {
         $what = $whatstats['what'];
         $message = "$timeurl -> $what";
-        $message .= ' @ ' . ($whatstats['time'] - $start);
+        if (!isset($usage['count'][$what])) {
+          $usage['count'][$what] = 0;
+        }
+        $usage['count'][$what]++;
+        $attime = ($whatstats['time'] - $start);
+        $message .= ' @ ' . $attime;
+        $sincelast = ($whatstats['time'] - $lasttime);
+        if ($lastwhat !== NULL) {
+          if (!isset($usage['time'][$lastwhat])) {
+            $usage['time'][$lastwhat] = 0.0;
+          }
+          $usage['time'][$lastwhat] += $sincelast;
+        }
         if (isset($whatstats['since'])) {
           foreach ($whatstats['since'] as $related => $label) {
             if (isset($lasts[$related]['time'])) {
-              $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $lasts[$related]['time']) . ')';
+              $timesince = ($whatstats['time'] - $lasts[$related]['time']);
+              $message .= ' (total for ' . $label . ':' . sprintf("%.5F", $timesince) . ')';
+              $lastsontime['timesince'][] = array( 'message' => "$what @ $attime took " . sprintf("%.5F", $timesince) . " since $label", 'time' => $timesince );
             }
             elseif ($related === 'REQUEST_TIME') {
-              $message .= ' (total for ' . $label . ':' . ($whatstats['time'] - $start) . ')';
+              $timesince = ($whatstats['time'] - $start);
+              $message .= ' (total for ' . $label . ':' . $timesince . ')';
+              $lastsontime['timesince'][] = array( 'message' => "$what @ $attime took " . sprintf("%.5F", $timesince) . " since requeststart", 'time' => $timesince );
             }
             else {
               $message .= ' (no total for ' . $label . ')';
@@ -374,7 +393,8 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
           }
         }
         elseif ($lasttime !== 0) {
-          $message .= ' (since last: ' . sprintf("%.5F", ($whatstats['time'] - $lasttime)) . ')';
+          $message .= ' (since last: ' . sprintf("%.5F", $sincelast) . ')';
+          $lastsontime['sincelast'][] = array( 'message' => "$what @ $attime took " . sprintf("%.5F", $sincelast), 'time' => $sincelast );
         }
         if (isset($whatstats['info'])) {
           $message .= ' => ' . $whatstats['info'];
@@ -383,7 +403,36 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
         $messages[] = $message;
         $lasts[$what] = $whatstats;
         $lasttime = $whatstats['time'];
+        $lastwhat = $what;
       }
+      $comparetimes = function ($a, $b) {
+        return (($a['time'] - $b['time']) > 0.0)?-1:-1;
+      };
+      $firstmessages = array();
+      $firstmessages[] = "\n>>>> $timeurl\n";
+      usort($lastsontime['sincelast'], $comparetimes);
+      $slowest = array_column(array_slice($lastsontime['sincelast'], 0, 3), 'message');
+      $firstmessages[] = '>>>> Slowest since last: ' . implode(', ', $slowest) . "\n";
+      usort($lastsontime['timesince'], $comparetimes);
+      $slowest = array_column(array_slice($lastsontime['timesince'], 0, 3), 'message');
+      $firstmessages[] = '>>>> Slowest since related: ' . implode(', ', $slowest) . "\n";
+      arsort($usage['count'], SORT_NUMERIC);
+      $i = 3;
+      foreach ($usage['count'] as $what => $count) {
+        $firstmessages[] = ">>>> Most used: $what => $count (" . sprintf("%.5F", $usage['time'][$what]) . " sec)\n";
+        if (--$i <= 0) {
+          break;
+        }
+      }
+      arsort($usage['time'], SORT_NUMERIC);
+      $i = 3;
+      foreach ($usage['time'] as $what => $count) {
+        $firstmessages[] = ">>>> Most time: $what => " . sprintf("%.5F", $count) . " (" . $usage['count'][$what] . " times)\n";
+        if (--$i <= 0) {
+          break;
+        }
+      }
+      $messages = $firstmessages + $messages;
     }
     file_put_contents($path, $messages, FILE_APPEND | LOCK_EX);
     unset($stats);
