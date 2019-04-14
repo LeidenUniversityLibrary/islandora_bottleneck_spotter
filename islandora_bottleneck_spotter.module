@@ -373,7 +373,7 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
             }
           }
         }
-        else {
+        elseif ($lasttime !== 0) {
           $message .= ' (since last: ' . sprintf("%.5F", ($whatstats['time'] - $lasttime)) . ')';
         }
         if (isset($whatstats['info'])) {
