@@ -432,7 +432,7 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
           break;
         }
       }
-      $messages = $firstmessages + $messages;
+      $messages = array_merge($firstmessages, $messages);
     }
     file_put_contents($path, $messages, FILE_APPEND | LOCK_EX);
     unset($stats);
