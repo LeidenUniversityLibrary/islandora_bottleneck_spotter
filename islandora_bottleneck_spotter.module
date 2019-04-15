@@ -41,6 +41,14 @@ function islandora_bottleneck_spotter_exit() {
  */
 
 /**
+ * Implements hook_islandora_solr_query().
+ */
+function islandora_bottleneck_spotter_islandora_solr_query($solrobj) {
+  // Use solr_query_alter to print query info, this is only for timing.
+  _islandora_bottleneck_spotter_mark('solr_query');
+}
+
+/**
  * Implements hook_islandora_solr_query_alter().
  */
 function islandora_bottleneck_spotter_islandora_solr_query_alter($solrobj) {
@@ -405,16 +413,22 @@ function _islandora_bottleneck_spotter_mark($what, $time_since = NULL, $info = N
         $lasttime = $whatstats['time'];
         $lastwhat = $what;
       }
+      if (!isset($usage['time'][$lastwhat])) {
+        $usage['time'][$lastwhat] = 0.0;
+      }
+      $usage['time'][$lastwhat] += $sincelast;
       $comparetimes = function ($a, $b) {
-        return (($a['time'] - $b['time']) > 0.0)?-1:-1;
+        return (($a['time'] - $b['time']) > 0.0)?-1:1;
       };
       $firstmessages = array();
       $firstmessages[] = "\n>>>> $timeurl\n";
-      usort($lastsontime['sincelast'], $comparetimes);
-      $slowest = array_column(array_slice($lastsontime['sincelast'], 0, 3), 'message');
+      $slowest = array_values($lastsontime['sincelast']);
+      usort($slowest, $comparetimes);
+      $slowest = array_column(array_slice($slowest, 0, 3), 'message');
       $firstmessages[] = '>>>> Slowest since last: ' . implode(', ', $slowest) . "\n";
-      usort($lastsontime['timesince'], $comparetimes);
-      $slowest = array_column(array_slice($lastsontime['timesince'], 0, 3), 'message');
+      $slowest = $lastsontime['timesince'];
+      usort($slowest, $comparetimes);
+      $slowest = array_column(array_slice($slowest, 0, 3), 'message');
       $firstmessages[] = '>>>> Slowest since related: ' . implode(', ', $slowest) . "\n";
       arsort($usage['count'], SORT_NUMERIC);
       $i = 3;
